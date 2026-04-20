@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login — StudentMS</title>
+  <link rel="stylesheet" href="/css/base.css">
+  <link rel="stylesheet" href="/css/components.css">
+  <link rel="stylesheet" href="/css/layout.css">
+  <style>
+    body { display: flex; align-items: center; justify-content: center; }
+  </style>
+</head>
+<body>
+  <div id="toast-container"></div>
+
+  <div id="login-page">
+    <div class="login-box">
+      <div class="login-logo">
+        <div class="login-logo-icon">🎓</div>
+        <div class="login-logo-text">Student<span>MS</span></div>
+      </div>
+
+      <h1 class="login-title">Welcome back</h1>
+      <p class="login-subtitle">Sign in to your administration portal</p>
+
+      <form id="loginForm" autocomplete="off">
+        <div class="form-group mb-4">
+          <label class="form-label">Username</label>
+          <input class="form-control" id="loginUser" name="username" placeholder="admin" autocomplete="username" value="admin">
+          <span class="form-error"></span>
+        </div>
+        <div class="form-group mb-5">
+          <label class="form-label">Password</label>
+          <div style="position:relative">
+            <input class="form-control" id="loginPass" name="password" type="password" placeholder="••••••••" autocomplete="current-password" value="1234">
+            <button type="button" id="togglePass" style="position:absolute;right:var(--s3);top:50%;transform:translateY(-50%);background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:1rem">👁</button>
+          </div>
+          <span class="form-error" id="loginError" style="display:none"></span>
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-lg w-full" id="loginBtn">
+          Sign In
+        </button>
+      </form>
+
+      <div class="login-hint mt-5">
+        <span>💡</span>
+        <span>Demo credentials — username: <code>admin</code> · password: <code>1234</code></span>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Redirect if already logged in
+    if (localStorage.getItem('token')) window.location.href = '/';
+
+    // Toggle password visibility
+    document.getElementById('togglePass').addEventListener('click', function() {
+      const inp = document.getElementById('loginPass');
+      inp.type = inp.type === 'password' ? 'text' : 'password';
+      this.textContent = inp.type === 'password' ? '👁' : '🙈';
+    });
+
+    document.getElementById('loginForm').addEventListener('submit', async function(e) {
+      e.preventDefault();
+
+      const user = document.getElementById('loginUser').value.trim();
+      const pass = document.getElementById('loginPass').value;
+      const btn  = document.getElementById('loginBtn');
+      const errEl = document.getElementById('loginError');
+
+      if (!user || !pass) {
+        errEl.textContent = 'Please enter username and password';
+        errEl.style.display = 'block';
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = 'Signing in…';
+      errEl.style.display = 'none';
+
+      try {
+        const res = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: user, password: pass }),
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) throw new Error(data.error || 'Login failed');
+
+        localStorage.setItem('token', data.token);
+        window.location.href = '/';
+      } catch (err) {
+        errEl.textContent = err.message;
+        errEl.style.display = 'block';
+        btn.disabled = false;
+        btn.textContent = 'Sign In';
+      }
+    });
+  </script>
+</body>
+</html>
