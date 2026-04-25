@@ -218,5 +218,8 @@ const Utils = (() => {
     return data;
   }
 
-  return { Toast, Modal, paginator, escHtml, statusBadge, initials, fmtDate, fmtGpa, debounce, avatarColors, formError, clearErrors, getFormData };
+  // Alias: renderPagination is the same as paginator — both render a pagination control
+  function renderPagination(res, onPage) { return paginator(res, onPage); }
+
+  return { Toast, Modal, paginator, renderPagination, escHtml, statusBadge, initials, fmtDate, fmtGpa, debounce, avatarColors, formError, clearErrors, getFormData };
 })();

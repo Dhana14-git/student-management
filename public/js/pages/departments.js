@@ -2,6 +2,11 @@
 
 const DepartmentsPage = (() => {
 
+  let state = {
+    search: '', sort: 'name', dir: 'ASC',
+    page: 1, limit: 25,
+  };
+
   async function render(container) {
     container.innerHTML = `
       <div class="anim-fade-up">
@@ -12,6 +17,22 @@ const DepartmentsPage = (() => {
           </div>
           <button class="btn btn-primary" id="btnAddDept">+ Add Department</button>
         </div>
+
+        <div class="filter-bar">
+          <div class="search-wrap">
+            <span class="search-icon">🔍</span>
+            <input class="form-control search-input" id="deptSearch" placeholder="Search name, code, head…" value="${Utils.escHtml(state.search)}">
+          </div>
+          <select class="form-control" id="deptSort" style="width:180px">
+            <option value="name|ASC">Name A–Z</option>
+            <option value="name|DESC">Name Z–A</option>
+            <option value="code|ASC">Code A–Z</option>
+            <option value="student_count|DESC">Most Students</option>
+            <option value="course_count|DESC">Most Courses</option>
+            <option value="created_at|DESC">Newest First</option>
+          </select>
+        </div>
+
         <div class="card-grid" id="deptGrid">
           ${[...Array(5)].map(() => `
             <div class="dept-card">
@@ -20,24 +41,49 @@ const DepartmentsPage = (() => {
               <div class="skeleton" style="height:12px;width:80%"></div>
             </div>`).join('')}
         </div>
+        <div id="deptPagination"></div>
       </div>`;
 
+    const searchEl = container.querySelector('#deptSearch');
+    const sortEl   = container.querySelector('#deptSort');
+
+    // Restore current sort state in dropdown
+    sortEl.value = `${state.sort}|${state.dir}`;
+
+    searchEl.addEventListener('input', Utils.debounce(e => {
+      state.search = e.target.value; state.page = 1; loadDepts();
+    }, 350));
+
+    sortEl.addEventListener('change', e => {
+      const [col, dir] = e.target.value.split('|');
+      state.sort = col; state.dir = dir; state.page = 1; loadDepts();
+    });
+
     document.getElementById('btnAddDept').onclick = () => openDeptModal();
-    await loadDepts(container);
+    await loadDepts();
   }
 
-  async function loadDepts(container) {
+  async function loadDepts() {
+    const grid = document.getElementById('deptGrid');
+    const pag  = document.getElementById('deptPagination');
+    if (!grid) return;
+
     try {
-      const res  = await API.departments.list();
-      const grid = document.getElementById('deptGrid');
-      if (!grid) return;
+      const res = await API.departments.list({
+        search: state.search,
+        sort:   state.sort,
+        dir:    state.dir,
+        page:   state.page,
+        limit:  state.limit,
+      });
 
       if (!res.data.length) {
-        grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1"><div class="empty-state-icon">🏛️</div><h4>No departments yet</h4><p>Add your first department to get started.</p></div>`;
+        grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1"><div class="empty-state-icon">🏛️</div><h4>No departments found</h4><p>Add your first department or adjust filters.</p></div>`;
+        if (pag) pag.innerHTML = '';
         return;
       }
 
-      const icons = ['💻','📐','🔭','💼','⚙️','🧬','🎨','📖','🌍','🧪'];
+      const icons  = ['💻','📐','🔭','💼','⚙️','🧬','🎨','📖','🌍','🧪'];
       const colors = ['#5d7af6','#34d399','#f59e0b','#f87171','#a78bfa','#38bdf8','#fb7185','#4ade80','#fbbf24','#60a5fa'];
 
       grid.innerHTML = res.data.map((d, i) => {
@@ -74,6 +120,9 @@ const DepartmentsPage = (() => {
             </div>
           </div>`;
       }).join('');
+
+      if (pag) pag.innerHTML = Utils.renderPagination(res, p => { state.page = p; loadDepts(); });
+
     } catch (err) {
       Utils.Toast.error('Failed to load departments: ' + err.message);
     }
@@ -86,17 +135,17 @@ const DepartmentsPage = (() => {
         <div class="form-grid">
           <div class="form-group">
             <label class="form-label">Department Name *</label>
-            <input class="form-control" name="name" value="${Utils.escHtml(d.name||'')}" placeholder="Computer Science">
+            <input class="form-control" name="name" value="${Utils.escHtml(d.name||'')}" placeholder="Computer Science" maxlength="100">
             <span class="form-error"></span>
           </div>
           <div class="form-group">
-            <label class="form-label">Code *</label>
+            <label class="form-label">Code * (alphanumeric, max 10)</label>
             <input class="form-control" name="code" value="${Utils.escHtml(d.code||'')}" placeholder="CS" maxlength="10" style="text-transform:uppercase">
             <span class="form-error"></span>
           </div>
           <div class="form-group">
             <label class="form-label">Head Name</label>
-            <input class="form-control" name="head_name" value="${Utils.escHtml(d.head_name||'')}" placeholder="Dr. Jane Smith">
+            <input class="form-control" name="head_name" value="${Utils.escHtml(d.head_name||'')}" placeholder="Dr. Jane Smith" maxlength="100">
             <span class="form-error"></span>
           </div>
           <div class="form-group span-2">
@@ -156,7 +205,7 @@ const DepartmentsPage = (() => {
     const ok = await Utils.Modal.confirm({
       title: 'Delete Department',
       icon: '🏛️',
-      message: `Delete <span class="confirm-name">${Utils.escHtml(name)}</span>? This cannot be undone.`,
+      message: `Delete <span class="confirm-name">${Utils.escHtml(name)}</span>? Departments with students or courses cannot be deleted.`,
     });
     if (!ok) return;
     try {

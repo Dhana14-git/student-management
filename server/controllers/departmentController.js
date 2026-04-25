@@ -6,8 +6,12 @@ const DepartmentController = {
 
   async list(req, res) {
     try {
-      const rows = await DepartmentModel.list();
-      res.json({ data: rows });
+      const { search='', sort='name', dir='ASC', page=1, limit=25 } = req.query;
+      const result = await DepartmentModel.list({
+        search, sort, dir,
+        page: +page, limit: Math.min(+limit, 100),
+      });
+      res.json(result);
     } catch (err) {
       res.status(500).json({ error: err.message });
     }

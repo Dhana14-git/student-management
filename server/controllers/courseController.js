@@ -8,9 +8,13 @@ const CourseController = {
 
   async list(req, res) {
     try {
-      const { search='', department_id='' } = req.query;
-      const rows = await CourseModel.list({ search, department_id });
-      res.json({ data: rows });
+      const { search='', department_id='', sort='course_code', dir='ASC', page=1, limit=10 } = req.query;
+      const result = await CourseModel.list({
+        search, department_id,
+        sort, dir,
+        page: +page, limit: Math.min(+limit, 100),
+      });
+      res.json(result);
     } catch (err) {
       res.status(500).json({ error: err.message });
     }

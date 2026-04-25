@@ -1,108 +1,92 @@
-// public/js/api.js
+'use strict';
 
-const API = {
+// ── API client ────────────────────────────────────────────────────────────────
+const API = (() => {
 
-  // 🔐 headers
-  getHeaders() {
-    const token = localStorage.getItem("token");
+  function getHeaders() {
+    const token = localStorage.getItem('token');
     return {
-      "Content-Type": "application/json",
-      "Authorization": token ? "Bearer " + token : ""
+      'Content-Type': 'application/json',
+      'Authorization': token ? 'Bearer ' + token : '',
     };
-  },
+  }
 
-  // 🔹 Base request
-  async request(url, options = {}) {
-    const res = await fetch(url, {
-      ...options,
-      headers: this.getHeaders()
-    });
+  async function request(url, options = {}) {
+    let res;
+    try {
+      res = await fetch(url, { ...options, headers: getHeaders() });
+    } catch (networkErr) {
+      throw new Error('Network error — is the server running?');
+    }
 
     if (res.status === 401 || res.status === 403) {
-      alert("Session expired. Please login again.");
-      localStorage.removeItem("token");
-      window.location.href = "/login.html";
+      localStorage.removeItem('token');
+      window.location.href = '/login.html';
       return;
     }
 
-    return res.json();
-  },
+    const body = await res.json().catch(() => ({}));
 
-  // =========================
-  // 📊 DASHBOARD API
-  // =========================
-  dashboard: {
-    async stats() {
-      return API.request("/api/dashboard/stats");
+    if (!res.ok) {
+      const err = new Error(body.error || `HTTP ${res.status}`);
+      if (body.field) err.field = body.field;
+      throw err;
     }
-  },
 
-  // =========================
-  // 👨‍🎓 STUDENTS API
-  // =========================
-  students: {
-    list() {
-      return API.request("/api/students");
-    },
-
-    get(id) {
-      return API.request(`/api/students/${id}`);
-    },
-
-    create(data) {
-      return API.request("/api/students", {
-        method: "POST",
-        body: JSON.stringify(data)
-      });
-    },
-
-    update(id, data) {
-      return API.request(`/api/students/${id}`, {
-        method: "PUT",
-        body: JSON.stringify(data)
-      });
-    },
-
-    delete(id) {
-      return API.request(`/api/students/${id}`, {
-        method: "DELETE"
-      });
-    }
-  }, // ✅ FIXED (comma added)
-
-  // =========================
-  // 🏫 DEPARTMENTS API
-  // =========================
-  departments: {
-    list() {
-      return API.request("/api/departments");
-    },
-
-    create(data) {
-      return API.request("/api/departments", {
-        method: "POST",
-        body: JSON.stringify(data)
-      });
-    }
-  },
-
-  // =========================
-  // 📚 COURSES API
-  // =========================
-  courses: {
-    list() {
-      return API.request("/api/courses");
-    },
-
-    create(data) {
-      return API.request("/api/courses", {
-        method: "POST",
-        body: JSON.stringify(data)
-      });
-    }
+    return body;
   }
 
-};
+  function toQS(params = {}) {
+    const entries = Object.entries(params).filter(([, v]) => v !== '' && v !== null && v !== undefined);
+    return entries.length ? '?' + new URLSearchParams(entries).toString() : '';
+  }
 
-// 🔥 VERY IMPORTANT
+  return {
+    // ── Dashboard ────────────────────────────────────────────────────────
+    dashboard: {
+      stats() { return request('/api/dashboard/stats'); },
+    },
+
+    // ── Students ─────────────────────────────────────────────────────────
+    students: {
+      list(params = {}) { return request(`/api/students${toQS(params)}`); },
+      get(id)           { return request(`/api/students/${id}`); },
+      create(data)      { return request('/api/students', { method: 'POST', body: JSON.stringify(data) }); },
+      update(id, data)  { return request(`/api/students/${id}`, { method: 'PUT', body: JSON.stringify(data) }); },
+      delete(id)        { return request(`/api/students/${id}`, { method: 'DELETE' }); },
+    },
+
+    // ── Departments ──────────────────────────────────────────────────────
+    departments: {
+      list(params = {}) { return request(`/api/departments${toQS(params)}`); },
+      get(id)           { return request(`/api/departments/${id}`); },
+      create(data)      { return request('/api/departments', { method: 'POST', body: JSON.stringify(data) }); },
+      update(id, data)  { return request(`/api/departments/${id}`, { method: 'PUT', body: JSON.stringify(data) }); },
+      delete(id)        { return request(`/api/departments/${id}`, { method: 'DELETE' }); },
+    },
+
+    // ── Courses ──────────────────────────────────────────────────────────
+    courses: {
+      list(params = {}) { return request(`/api/courses${toQS(params)}`); },
+      get(id)           { return request(`/api/courses/${id}`); },
+      create(data)      { return request('/api/courses', { method: 'POST', body: JSON.stringify(data) }); },
+      update(id, data)  { return request(`/api/courses/${id}`, { method: 'PUT', body: JSON.stringify(data) }); },
+      delete(id)        { return request(`/api/courses/${id}`, { method: 'DELETE' }); },
+    },
+
+    // ── Enrollments (nested under courses) ────────────────────────────────
+    enrollments: {
+      create(courseId, data) {
+        return request(`/api/courses/${courseId}/enrollments`, { method: 'POST', body: JSON.stringify(data) });
+      },
+      update(courseId, enrollId, data) {
+        return request(`/api/courses/${courseId}/enrollments/${enrollId}`, { method: 'PUT', body: JSON.stringify(data) });
+      },
+      delete(courseId, enrollId) {
+        return request(`/api/courses/${courseId}/enrollments/${enrollId}`, { method: 'DELETE' });
+      },
+    },
+  };
+})();
+
 window.API = API;

@@ -2,17 +2,33 @@
 
 const db = require('../config/database');
 
+const ALLOWED_SORT = new Set(['course_code','title','credits','instructor','enrolled_count','department_name']);
+
 const CourseModel = {
 
-  async list({ search = '', department_id = '' } = {}) {
+  async list({ search = '', department_id = '', sort = 'course_code', dir = 'ASC', page = 1, limit = 10 } = {}) {
+    const safeSort = ALLOWED_SORT.has(sort) ? sort : 'course_code';
+    const safeDir  = dir === 'DESC' ? 'DESC' : 'ASC';
+    const offset   = (Math.max(1, page) - 1) * limit;
+
     const where = []; const vals = [];
     if (search) {
-      where.push('(c.title LIKE ? OR c.course_code LIKE ? OR c.instructor LIKE ?)');
-      vals.push(`%${search}%`, `%${search}%`, `%${search}%`);
+      where.push('(c.title LIKE ? OR c.course_code LIKE ? OR c.instructor LIKE ? OR c.description LIKE ?)');
+      vals.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
     }
     if (department_id) { where.push('c.department_id=?'); vals.push(department_id); }
 
     const clause = where.length ? 'WHERE ' + where.join(' AND ') : '';
+
+    // Count total (without pagination)
+    const [[{ total }]] = await db.query(
+      `SELECT COUNT(DISTINCT c.id) AS total FROM courses c ${clause}`, vals
+    );
+
+    // Determine ORDER BY — enrolled_count and department_name come from aliases
+    const orderCol = ['enrolled_count','department_name'].includes(safeSort)
+      ? safeSort
+      : `c.${safeSort}`;
 
     const [rows] = await db.query(
       `SELECT c.*, d.name AS department_name,
@@ -22,10 +38,11 @@ const CourseModel = {
        LEFT JOIN enrollments e ON e.course_id = c.id AND e.status='Enrolled'
        ${clause}
        GROUP BY c.id
-       ORDER BY c.course_code`,
-      vals
+       ORDER BY ${orderCol} ${safeDir}
+       LIMIT ? OFFSET ?`,
+      [...vals, limit, offset]
     );
-    return rows;
+    return { data: rows, total, page: Number(page), totalPages: Math.ceil(total / limit) };
   },
 
   async findById(id) {
@@ -44,10 +61,10 @@ const CourseModel = {
 
   async findByCode(code, excludeId = null) {
     if (excludeId) {
-      const [[r]] = await db.query('SELECT id FROM courses WHERE course_code=? AND id!=?', [code, excludeId]);
+      const [[r]] = await db.query('SELECT id FROM courses WHERE course_code=? AND id!=?', [code.toUpperCase(), excludeId]);
       return r || null;
     }
-    const [[r]] = await db.query('SELECT id FROM courses WHERE course_code=?', [code]);
+    const [[r]] = await db.query('SELECT id FROM courses WHERE course_code=?', [code.toUpperCase()]);
     return r || null;
   },
 
@@ -55,7 +72,7 @@ const CourseModel = {
     const [r] = await db.query(
       `INSERT INTO courses (course_code,title,description,credits,department_id,instructor,max_capacity)
        VALUES (?,?,?,?,?,?,?)`,
-      [course_code.toUpperCase(), title, description, credits, department_id||null, instructor, max_capacity]
+      [course_code.toUpperCase(), title.trim(), description, Number(credits), department_id||null, instructor, Number(max_capacity)]
     );
     return r.insertId;
   },
@@ -63,7 +80,7 @@ const CourseModel = {
   async update(id, { course_code, title, description=null, credits=3, department_id=null, instructor=null, max_capacity=30 }) {
     await db.query(
       `UPDATE courses SET course_code=?,title=?,description=?,credits=?,department_id=?,instructor=?,max_capacity=? WHERE id=?`,
-      [course_code.toUpperCase(), title, description, credits, department_id||null, instructor, max_capacity, id]
+      [course_code.toUpperCase(), title.trim(), description, Number(credits), department_id||null, instructor, Number(max_capacity), id]
     );
   },
 
